@@ -168,8 +168,9 @@ type ClaudeHeaderDefaults struct {
 // model requests for OAuth/file-backed auth when the client omits them.
 // UserAgent applies to HTTP and websocket requests; BetaFeatures only applies to websockets.
 type CodexHeaderDefaults struct {
-	UserAgent    string `yaml:"user-agent" json:"user-agent"`
-	BetaFeatures string `yaml:"beta-features" json:"beta-features"`
+	UserAgent               string `yaml:"user-agent" json:"user-agent"`
+	BetaFeatures            string `yaml:"beta-features" json:"beta-features"`
+	StreamFirstEventTimeout string `yaml:"stream-first-event-timeout" json:"stream-first-event-timeout"`
 }
 
 // TLSConfig holds HTTPS server settings.
@@ -825,6 +826,7 @@ func (cfg *Config) SanitizeCodexHeaderDefaults() {
 	}
 	cfg.CodexHeaderDefaults.UserAgent = strings.TrimSpace(cfg.CodexHeaderDefaults.UserAgent)
 	cfg.CodexHeaderDefaults.BetaFeatures = strings.TrimSpace(cfg.CodexHeaderDefaults.BetaFeatures)
+	cfg.CodexHeaderDefaults.StreamFirstEventTimeout = strings.TrimSpace(cfg.CodexHeaderDefaults.StreamFirstEventTimeout)
 }
 
 // SanitizeClaudeHeaderDefaults trims surrounding whitespace from the

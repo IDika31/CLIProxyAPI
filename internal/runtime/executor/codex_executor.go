@@ -328,7 +328,11 @@ func (e *CodexExecutor) Execute(ctx context.Context, auth *cliproxyauth.Auth, re
 		err = newCodexStatusErr(httpResp.StatusCode, b)
 		return resp, err
 	}
-	data, err := io.ReadAll(httpResp.Body)
+	firstRead := make(chan struct{}, 1)
+	watchdogDone := make(chan struct{})
+	go helps.WatchCodexFirstEvent(ctx, httpResp.Body, firstRead, watchdogDone, helps.CodexStreamFirstEventTimeout(e.cfg))
+	data, err := io.ReadAll(helps.NewReadSignalerCloser(httpResp.Body, firstRead))
+	close(watchdogDone)
 	if err != nil {
 		helps.RecordAPIResponseError(ctx, e.cfg, err)
 		return resp, err
@@ -484,7 +488,11 @@ func (e *CodexExecutor) executeCompact(ctx context.Context, auth *cliproxyauth.A
 		err = newCodexStatusErr(httpResp.StatusCode, b)
 		return resp, err
 	}
-	data, err := io.ReadAll(httpResp.Body)
+	firstRead := make(chan struct{}, 1)
+	watchdogDone := make(chan struct{})
+	go helps.WatchCodexFirstEvent(ctx, httpResp.Body, firstRead, watchdogDone, helps.CodexStreamFirstEventTimeout(e.cfg))
+	data, err := io.ReadAll(helps.NewReadSignalerCloser(httpResp.Body, firstRead))
+	close(watchdogDone)
 	if err != nil {
 		helps.RecordAPIResponseError(ctx, e.cfg, err)
 		return resp, err
@@ -589,8 +597,12 @@ func (e *CodexExecutor) ExecuteStream(ctx context.Context, auth *cliproxyauth.Au
 		return nil, err
 	}
 	out := make(chan cliproxyexecutor.StreamChunk)
+	firstEvent := make(chan struct{}, 1)
+	watchdogDone := make(chan struct{})
+	go helps.WatchCodexFirstEvent(ctx, httpResp.Body, firstEvent, watchdogDone, helps.CodexStreamFirstEventTimeout(e.cfg))
 	go func() {
 		defer close(out)
+		defer close(watchdogDone)
 		defer func() {
 			if errClose := httpResp.Body.Close(); errClose != nil {
 				log.Errorf("codex executor: close response body error: %v", errClose)
@@ -601,7 +613,15 @@ func (e *CodexExecutor) ExecuteStream(ctx context.Context, auth *cliproxyauth.Au
 		var param any
 		outputItemsByIndex := make(map[int64][]byte)
 		var outputItemsFallback [][]byte
+		firstEventSignalled := false
 		for scanner.Scan() {
+			if !firstEventSignalled {
+				select {
+				case firstEvent <- struct{}{}:
+				default:
+				}
+				firstEventSignalled = true
+			}
 			line := scanner.Bytes()
 			helps.AppendAPIResponseChunk(ctx, e.cfg, line)
 			translatedLine := bytes.Clone(line)
